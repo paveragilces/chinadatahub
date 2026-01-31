@@ -6,186 +6,186 @@ import re
 import glob
 import subprocess
 import unicodedata
+import plotly.express as px
 from datetime import datetime
 
 # ==============================================================================
 # CONFIG
 # ==============================================================================
-st.set_page_config(
-    layout="wide",
-    page_title="China Data Hub – CUODE ETL",
-    page_icon="🇨🇳"
-)
+st.set_page_config(layout="wide", page_title="China Data Hub ETL - CUODE", page_icon="🇨🇳")
 
-RAW_DATA_PATH = "/Users/paulvera/Desktop/China Data Hub/Cuode"
+DEFAULT_RAW_DATA_PATH = "/Users/paulvera/Desktop/China Data Hub/Cuode"
 REPO_PATH = os.getcwd()
-API_OUTPUT_PATH = os.path.join(REPO_PATH, "public", "data", "importscuode")
-DEFAULT_BRANCH = "main"
+API_OUTPUT_BASE = os.path.join(REPO_PATH, "public", "data")
+FLOW_NAME = "importscuode"  # NUEVO endpoint
+API_OUTPUT_PATH = os.path.join(API_OUTPUT_BASE, FLOW_NAME)
+DEFAULT_BRANCH = "main"  # cambia si tu repo usa master
+
 
 # ==============================================================================
 # HELPERS
 # ==============================================================================
 def norm(txt):
-    if txt is None:
-        return ""
-    txt = str(txt).strip().lower()
-    txt = ''.join(
-        c for c in unicodedata.normalize("NFD", txt)
-        if unicodedata.category(c) != "Mn"
-    )
+    txt = "" if txt is None else str(txt)
+    txt = txt.strip().lower()
+    txt = ''.join(c for c in unicodedata.normalize("NFD", txt)
+                  if unicodedata.category(c) != "Mn")
     txt = re.sub(r"\s+", " ", txt)
     return txt
 
 
 def run(cmd, cwd=None):
-    res = subprocess.run(
-        cmd, cwd=cwd,
-        capture_output=True, text=True
-    )
+    res = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     if res.returncode != 0:
-        raise RuntimeError(res.stderr or res.stdout)
-    return res.stdout
+        raise RuntimeError(res.stderr.strip() or res.stdout.strip() or "Error ejecutando comando")
+    return res.stdout.strip()
+
+
+def find_header_row(filepath, max_rows=60, sheet_name=None):
+    """
+    Detecta fila de header buscando combinaciones típicas CUODE:
+    - periodo/período
+    - codigo subpartida
+    - (opcional) codigo grupo / codigo subgrupo
+    """
+    preview = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=max_rows, engine="openpyxl")
+    for i in range(len(preview)):
+        row = [norm(x) for x in preview.iloc[i].tolist()]
+        has_periodo = ("periodo" in row) or ("período" in row)  # por si acaso
+        has_cod_subpartida = any("codigo subpartida" == c or "código subpartida" == c for c in row) or ("codigo subpartida" in row)
+        if has_periodo and has_cod_subpartida:
+            return i
+    return None
+
+
+def parse_fecha_any(x):
+    """
+    CUODE suele venir anual (2020), pero soportamos:
+      - 'YYYY'
+      - 'YYYY/MM'
+      - 'YYYY / MM - Mes'
+    Devuelve 'YYYY-MM-01'
+    """
+    s = str(x).strip()
+
+    m = re.search(r"(\d{4})\s*/\s*(\d{1,2})", s)
+    if m:
+        yyyy = m.group(1)
+        mm = int(m.group(2))
+        return f"{yyyy}-{mm:02d}-01"
+
+    m2 = re.search(r"(\d{4})", s)
+    if m2:
+        yyyy = m2.group(1)
+        return f"{yyyy}-01-01"
+
+    return None
 
 
 # ==============================================================================
-# ETL
+# ETL ENGINE (CUODE)
 # ==============================================================================
-class CuodeETL:
+class ETLCuode:
 
-    def clean_text(self, txt):
-        if not isinstance(txt, str):
+    def clean_text(self, text):
+        if not isinstance(text, str):
             return "Desconocido"
-        txt = re.sub(r"\(.*?\)", "", txt)
-        txt = txt.strip()
-        return txt.capitalize() if txt else "Desconocido"
+        txt = text.strip()
+        txt = re.sub(r"\(.*?\)", "", txt).strip()
+        txt = re.sub(r"\s+", " ", txt).strip()
+        return txt if txt else "Desconocido"
 
-    def run_etl(self, status):
-        status.write(f"📂 Leyendo CUODE desde: `{RAW_DATA_PATH}`")
+    def run_process(self, status, raw_path):
+        status.write(f"📂 Leyendo CUODE desde: `{raw_path}`")
 
         files = [
-            f for f in glob.glob(os.path.join(RAW_DATA_PATH, "*.xlsx"))
+            f for f in glob.glob(os.path.join(raw_path, "*.xlsx"))
             if not os.path.basename(f).startswith("~$")
         ]
 
         if not files:
-            status.error("❌ No se encontraron archivos .xlsx válidos")
+            status.error("❌ No se encontraron .xlsx válidos (se ignoran ~$.xlsx).")
             return False
 
         os.makedirs(API_OUTPUT_PATH, exist_ok=True)
-
-        summary = []
+        resumen = []
         processed = 0
 
         for filepath in sorted(files):
-            fname = os.path.basename(filepath)
-            status.write(f"🔄 Procesando {fname}")
+            filename = os.path.basename(filepath)
+            status.write(f"🔄 Procesando {filename}")
 
             try:
-                df = pd.read_excel(filepath, dtype=str, engine="openpyxl")
-                df.columns = df.columns.astype(str).str.strip()
+                # por si viene con hoja distinta, usamos la primera
+                xls = pd.ExcelFile(filepath)
+                sheet = xls.sheet_names[0] if xls.sheet_names else None
 
-                # Normalizar columnas
-                cols = {norm(c): c for c in df.columns}
+                header_idx = find_header_row(filepath, sheet_name=sheet)
+                if header_idx is None:
+                    status.warning(f"⚠️ No se detectó encabezado en {filename} (Período + Código Subpartida).")
+                    continue
+
+                df = pd.read_excel(filepath, sheet_name=sheet, header=header_idx, engine="openpyxl")
+                df.columns = df.columns.astype(str).str.strip()
+                df = df.loc[:, ~df.columns.str.contains("^Unnamed", na=False)]  # quita Unnamed
+
+                # normalización columnas
+                norm_cols = {norm(c): c for c in df.columns}
 
                 def pick(*opts):
                     for o in opts:
-                        if o in cols:
-                            return cols[o]
+                        if o in norm_cols:
+                            return norm_cols[o]
                     return None
 
-                rename = {
-                    pick("anio", "año"): "year",
-                    pick("codigo cuode", "cuode"): "cuode",
-                    pick("descripcion cuode", "descripcion"): "descripcion",
-                    pick("valor cif", "cif"): "cif",
-                    pick("peso neto", "peso"): "peso"
-                }
+                # CUODE: NO hay país. Sí hay grupo/subgrupo.
+                col_periodo = pick("periodo", "período")
+                col_grupo_cod = pick("codigo grupo", "código grupo", "cod grupo", "codigo de grupo")
+                col_grupo = pick("grupo")
+                col_subgrupo_cod = pick("codigo subgrupo", "código subgrupo", "cod subgrupo", "codigo de subgrupo")
+                col_subgrupo = pick("subgrupo")
+                col_cod = pick("codigo subpartida", "código subpartida")
+                col_desc = pick("subpartida", "descripcion", "descripción")
+                col_peso = pick("tm (peso neto)", "peso neto", "tm peso neto", "tm")
+                col_fob = pick("fob")
+                col_cif = pick("cif")
 
-                rename = {k: v for k, v in rename.items() if k}
-                df = df.rename(columns=rename)
-
-                if "year" not in df.columns or "cuode" not in df.columns:
-                    status.warning(f"⚠️ Columnas clave faltantes en {fname}")
+                # columnas mínimas CUODE
+                if not col_periodo or not col_cod:
+                    status.warning(f"⚠️ Columnas mínimas faltantes en {filename}. Columnas: {list(df.columns)}")
                     continue
 
-                df["year"] = df["year"].astype(str).str[:4]
-                df["cuode"] = df["cuode"].astype(str).str.strip()
-                df["descripcion"] = df["descripcion"].apply(self.clean_text)
+                # renombrar a esquema estándar CUODE
+                rename = {
+                    col_periodo: "fecha_txt",
+                    col_cod: "cod",
+                }
+                if col_desc: rename[col_desc] = "label"
+                if col_grupo_cod: rename[col_grupo_cod] = "grupo_cod"
+                if col_grupo: rename[col_grupo] = "grupo"
+                if col_subgrupo_cod: rename[col_subgrupo_cod] = "subgrupo_cod"
+                if col_subgrupo: rename[col_subgrupo] = "subgrupo"
+                if col_peso: rename[col_peso] = "peso"
+                if col_fob: rename[col_fob] = "fob"
+                if col_cif: rename[col_cif] = "cif"
 
-                for c in ["cif", "peso"]:
+                df = df.rename(columns=rename)
+
+                # fecha
+                df["fecha"] = df["fecha_txt"].apply(parse_fecha_any)
+                df = df.dropna(subset=["fecha", "cod"])
+
+                # cod subpartida a 10 dígitos (si viene numérico largo)
+                df["cod"] = df["cod"].astype(str).str.replace(".0", "", regex=False).str.replace(".", "", regex=False).str.strip()
+                # si viene 9 dígitos, zfill; si viene 10+ se respeta
+                df["cod"] = df["cod"].apply(lambda x: x.zfill(10) if x.isdigit() and len(x) < 10 else x)
+
+                # texto limpio
+                if "label" in df.columns:
+                    df["label"] = df["label"].apply(self.clean_text)
+                else:
+                    df["label"] = "Desconocido"
+
+                for c in ["fob", "cif", "peso", "grupo_cod", "subgrupo_cod"]:
                     if c in df.columns:
-                        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
-
-                years = sorted(df["year"].unique())
-
-                for yr in years:
-                    sub = df[df["year"] == yr].copy()
-                    out = os.path.join(API_OUTPUT_PATH, f"{yr}.json")
-                    sub.to_json(out, orient="records", force_ascii=False)
-
-                    summary = [x for x in summary if x["year"] != yr]
-                    summary.append({
-                        "year": yr,
-                        "records": len(sub),
-                        "total_cif": round(float(sub["cif"].sum()), 2),
-                        "file": f"{yr}.json"
-                    })
-
-                processed += 1
-
-            except Exception as e:
-                status.error(f"❌ Error en {fname}: {e}")
-
-        if summary:
-            summary.sort(key=lambda x: x["year"], reverse=True)
-            with open(os.path.join(API_OUTPUT_PATH, "summary.json"), "w", encoding="utf-8") as f:
-                json.dump(summary, f, ensure_ascii=False, indent=2)
-
-        status.success(f"✅ ETL CUODE completo: {processed} archivos procesados")
-        return processed > 0
-
-    def git_publish(self):
-        try:
-            run(["git", "add", "public/data/importscuode"], cwd=REPO_PATH)
-
-            diff = subprocess.run(
-                ["git", "diff", "--cached", "--name-only"],
-                cwd=REPO_PATH, capture_output=True, text=True
-            )
-
-            if not diff.stdout.strip():
-                return True, "No había cambios nuevos que publicar."
-
-            msg = f"Update CUODE APIs {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            run(["git", "commit", "-m", msg], cwd=REPO_PATH)
-            run(["git", "push", "origin", DEFAULT_BRANCH], cwd=REPO_PATH)
-
-            return True, "🚀 APIs CUODE publicadas en GitHub Pages"
-
-        except Exception as e:
-            return False, str(e)
-
-
-# ==============================================================================
-# UI
-# ==============================================================================
-etl = CuodeETL()
-
-st.title("⚙️ ETL CUODE → APIs públicas")
-
-st.caption(
-    "Flujo: Excels CUODE → JSON → public/data/importscuode → git push → GitHub Pages"
-)
-
-st.code(RAW_DATA_PATH)
-st.code(API_OUTPUT_PATH)
-
-if st.button("🔄 Procesar Excels CUODE", type="primary"):
-    with st.status("Ejecutando ETL CUODE...", expanded=True) as status:
-        ok = etl.run_etl(status)
-    if ok:
-        st.success("CUODE procesado. Puedes publicar.")
-
-if st.button("☁️ Publicar APIs CUODE (git push)", type="secondary"):
-    ok, msg = etl.git_publish()
-    (st.success if ok else st.error)(msg)
+                        df[c] = pd.to_numeric(df[c], errors="coerce").fil_
