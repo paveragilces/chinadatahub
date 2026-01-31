@@ -73,5 +73,85 @@
     "year": "2010",
     "total_cif": 20603780.91,
     "file": "2010.json"
+  },
+  {
+    "year": "2009",
+    "total_cif": 15089890.24,
+    "file": "2009.json"
+  },
+  {
+    "year": "2008",
+    "total_cif": 18851930.53,
+    "file": "2008.json"
+  },
+  {
+    "year": "2007",
+    "total_cif": 13893461.43,
+    "file": "2007.json"
+  },
+  {
+    "year": "2006",
+    "total_cif": 12113559.76,
+    "file": "2006.json"
+  },
+  {
+    "year": "2005",
+    "total_cif": 10301589.47,
+    "file": "2005.json"
+  },
+  {
+    "year": "2004",
+    "total_cif": 8133635.8,
+    "file": "2004.json"
+  },
+  {
+    "year": "2003",
+    "total_cif": 6707766.98,
+    "file": "2003.json"
+  },
+  {
+    "year": "2002",
+    "total_cif": 6620465.86,
+    "file": "2002.json"
+  },
+  {
+    "year": "2001",
+    "total_cif": 5362856.02,
+    "file": "2001.json"
+  },
+  {
+    "year": "2000",
+    "total_cif": 3721200.8,
+    "file": "2000.json"
+  },
+  {
+    "year": "1999",
+    "total_cif": 3017255.55,
+    "file": "1999.json"
+  },
+  {
+    "year": "1998",
+    "total_cif": 5575733.83,
+    "file": "1998.json"
+  },
+  {
+    "year": "1997",
+    "total_cif": 4954833.42,
+    "file": "1997.json"
+  },
+  {
+    "year": "1996",
+    "total_cif": 3931720.19,
+    "file": "1996.json"
+  },
+  {
+    "year": "1995",
+    "total_cif": 4152635.46,
+    "file": "1995.json"
+  },
+  {
+    "year": "1994",
+    "total_cif": 3622018.79,
+    "file": "1994.json"
   }
 ]
