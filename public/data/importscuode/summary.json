@@ -1,0 +1,77 @@
+[
+  {
+    "year": "2024",
+    "total_cif": 29491100.62,
+    "file": "2024.json"
+  },
+  {
+    "year": "2023",
+    "total_cif": 30901645.49,
+    "file": "2023.json"
+  },
+  {
+    "year": "2022",
+    "total_cif": 33048949.4,
+    "file": "2022.json"
+  },
+  {
+    "year": "2021",
+    "total_cif": 25689669.95,
+    "file": "2021.json"
+  },
+  {
+    "year": "2020",
+    "total_cif": 17920607.78,
+    "file": "2020.json"
+  },
+  {
+    "year": "2019",
+    "total_cif": 22562188.34,
+    "file": "2019.json"
+  },
+  {
+    "year": "2018",
+    "total_cif": 23179136.36,
+    "file": "2018.json"
+  },
+  {
+    "year": "2017",
+    "total_cif": 20009458.86,
+    "file": "2017.json"
+  },
+  {
+    "year": "2016",
+    "total_cif": 16339015.57,
+    "file": "2016.json"
+  },
+  {
+    "year": "2015",
+    "total_cif": 21491796.28,
+    "file": "2015.json"
+  },
+  {
+    "year": "2014",
+    "total_cif": 27719417.99,
+    "file": "2014.json"
+  },
+  {
+    "year": "2013",
+    "total_cif": 27025413.45,
+    "file": "2013.json"
+  },
+  {
+    "year": "2012",
+    "total_cif": 25454377.7,
+    "file": "2012.json"
+  },
+  {
+    "year": "2011",
+    "total_cif": 24370630.08,
+    "file": "2011.json"
+  },
+  {
+    "year": "2010",
+    "total_cif": 20603780.91,
+    "file": "2010.json"
+  }
+]
