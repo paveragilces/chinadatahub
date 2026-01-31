@@ -188,4 +188,8 @@ class ETLCuode:
 
                 for c in ["fob", "cif", "peso", "grupo_cod", "subgrupo_cod"]:
                     if c in df.columns:
-                        df[c] = pd.to_numeric(df[c], errors="coerce").fil_
+                        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+
+
+
+
